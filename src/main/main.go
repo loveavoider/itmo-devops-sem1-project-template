@@ -16,9 +16,13 @@ type PostResponse struct {
 	TotalPrice      int `json:"total_price"`
 }
 
-func httpHandler(w http.ResponseWriter, r *http.Request) {
+type HttpHandler struct {
+	db *db.Database
+}
+
+func (h *HttpHandler) handle(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
-		prices, err := db.GetPrices()
+		prices, err := h.db.GetPrices()
 
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -69,13 +73,11 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 
-		err = db.InsertPrices(prices)
+		sP, cC, err := h.db.InsertPrices(prices)
 
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-
-		sP, cC, err := db.GetSumPriceAndCountCategories()
 
 		body, err := json.Marshal(PostResponse{
 			TotalItems:      len(prices),
@@ -99,6 +101,21 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	http.HandleFunc("/api/v0/prices", httpHandler)
+	database := db.Database{}
+	if err := database.SetConnect(); err != nil {
+		log.Println(err)
+		return
+	}
+
+	defer func() {
+		if err := database.Close(); err != nil {
+			log.Println(err)
+		}
+	}()
+
+	h := &HttpHandler{
+		db: &database,
+	}
+	http.HandleFunc("/api/v0/prices", h.handle)
 	log.Println(http.ListenAndServe(":8080", nil))
 }
